@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yourusername/chatroom/pkg/token" // TODO: Change
+	"github.com/MartinLeNizon/GoChat/pkg/token"
 )
 
 func (cr *ChatRoom) createSession(username string) *SessionInfo {
-	cr.sessionMu.Lock()
+	cr.sessionsMu.Lock()
 	defer cr.sessionsMu.Unlock()
 
 	tok := token.GenerateToken()
@@ -17,7 +17,7 @@ func (cr *ChatRoom) createSession(username string) *SessionInfo {
 		Username:		username,
 		ReconnectToken: tok,
 		LastSeen:		time.Now(),
-		CreatedAt:		time.Now()
+		CreatedAt:		time.Now(),
 	}
 
 	cr.sessions[username] = session
@@ -29,7 +29,7 @@ func (cr *ChatRoom) createSession(username string) *SessionInfo {
 
 func (cr *ChatRoom) validateReconnectToken(username, token string) bool {
 	cr.sessionsMu.Lock()
-	defer cr.sessionMu.Unlock()
+	defer cr.sessionsMu.Unlock()
 
 	session, exist := cr.sessions[username]
 	if !exist {
@@ -59,7 +59,7 @@ func (cr *ChatRoom) updateSessionActivity(username string) {
 	}
 }
 
-func (cr *ChatRoom) isUsernameConnected(username string) {
+func (cr *ChatRoom) isUsernameConnected(username string) bool {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 

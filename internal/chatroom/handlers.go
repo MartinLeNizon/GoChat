@@ -18,7 +18,7 @@ func (chatRoom *ChatRoom) handleBroadcast(message string) {
 
 	chatRoom.messageMu.Lock()
 	msg := Message {
-		ID:				chatroom.nextMessageId,
+		ID:				chatRoom.nextMessageID,
 		From:			from,
 		Content:		actualContent,
 		Timestamp:		time.Now(),
@@ -30,14 +30,14 @@ func (chatRoom *ChatRoom) handleBroadcast(message string) {
 
 	// Persist to WAL
 	if err := chatRoom.persistMessage(msg); err != nil {
-		fmt.Println("Failed to persist: %v\n", err)
+		fmt.Printf("Failed to persist: %v\n", err)
 		// Continue anyway
 	}
 
 	// Collect current clients
 	chatRoom.mu.Lock()
 	clients := make([]*Client, 0, len(chatRoom.clients))
-	for client := range chatRoom.Clients {
+	for client := range chatRoom.clients {
 		clients = append(clients, client)
 	}
 	chatRoom.totalMessages++
@@ -46,11 +46,11 @@ func (chatRoom *ChatRoom) handleBroadcast(message string) {
 	fmt.Printf("Broadcasting to %d clients: %s", len(clients), message)
 
 	// Fan-out to all clients
-	for _, clients := range clients {
+	for _, client := range clients {
 		select {
 		case client.outgoing <- message:
 			client.mu.Lock()
-			client.MessagesSent++
+			client.messagesSent++
 			client.mu.Unlock()
 		default:
 			fmt.Printf("Skipped %s (channel full)\n", client.username)
@@ -92,7 +92,7 @@ func (chatRoom *ChatRoom) handleLeave(client *Client) {
 		close(client.outgoing)
 	}
 
-	announcement := Sprintf("*** %s left the chat ***\n", client.username)
+	announcement := fmt.Sprintf("*** %s left the chat ***\n", client.username)
 	chatRoom.handleBroadcast(announcement)
 }
 
@@ -123,7 +123,7 @@ func (chatRoom *ChatRoom) sendUserList(client *Client) {
 
 	list := "Users online: \n"
 	for c := range chatRoom.clients {
-		stats := ""
+		status := ""
 		if c.isInactive(1 * time.Minute) {
 			status = " (idle)"
 		}
@@ -148,6 +148,18 @@ func (chatRoom *ChatRoom) handleDirectMessage(dm DirectMessage) {
 	default:
 		fmt.Printf("Couldn't deliver DM to %s\n", dm.toClient.username)
 	}
+}
+
+func (cr *ChatRoom) findClientByUsername(username string) *Client {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+
+	for client := range cr.clients {
+		if client.username == username {
+			return client
+		}
+	}
+	return nil
 }
 
 func (client *Client) markActive() {

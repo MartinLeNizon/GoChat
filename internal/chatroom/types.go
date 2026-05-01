@@ -27,7 +27,7 @@ type Client struct {
 	mu				sync.Mutex
 }
 
-type Chatroom struct {
+type ChatRoom struct {
 	// Communication channels
 	join			chan *Client
 	leave			chan *Client

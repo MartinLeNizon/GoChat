@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -13,7 +14,7 @@ func (cr *ChatRoom) initializePersistence() error {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 
-	walFile := filepath.Join(cr.DataDir, "messages.wal")
+	walPath := filepath.Join(cr.dataDir, "messages.wal")
 
 	if err := cr.recoverFromWAL(walPath); err != nil {
 		fmt.Printf("Recovery failed: %v\n", err)
@@ -24,7 +25,7 @@ func (cr *ChatRoom) initializePersistence() error {
 		return fmt.Errorf("open wal: %w", err)
 	}
 
-	cr.WalFile = file
+	cr.walFile = file
 	fmt.Printf("WAL Initialized: %s\n", walPath)
 	return nil
 }
@@ -49,7 +50,7 @@ func (cr *ChatRoom) recoverFromWAL(walPath string) error {
 			continue
 		}
 
-		var msgMessage
+		var msg Message
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
 			fmt.Printf("Skipping corrupt line: %s\n", line)
 			continue
@@ -58,7 +59,7 @@ func (cr *ChatRoom) recoverFromWAL(walPath string) error {
 		cr.messages = append(cr.messages, msg)
 
 		if msg.ID >= cr.nextMessageID {
-			cr.NextMessageID = msg.ID + 1
+			cr.nextMessageID = msg.ID + 1
 		}
 		recovered++
 	}
@@ -68,15 +69,15 @@ func (cr *ChatRoom) recoverFromWAL(walPath string) error {
 }
 
 func (cr *ChatRoom) persistMessage(msg Message) error {
-	cr.WalMu.Lock()
-	defer cr.WalMu.Unlock()
+	cr.walMu.Lock()
+	defer cr.walMu.Unlock()
 
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 
-	_, err := cr.walFile.Write(append(data, '\n'))
+	_, err = cr.walFile.Write(append(data, '\n'))
 	if err != nil {
 		return err
 	}
@@ -94,7 +95,7 @@ func (cr *ChatRoom) createSnapshot() error {
 	}
 	defer file.Close()
 
-	cr.MessageMu.Lock()
+	cr.messageMu.Lock()
 	data, err := json.MarshalIndent(cr.messages, "", "	")
 	cr.messageMu.Unlock()
 
@@ -112,11 +113,11 @@ func (cr *ChatRoom) createSnapshot() error {
 
 	file.Close()
 
-	if err := os.rename(tempPath, snapshotPath); err != nil {
+	if err := os.Rename(tempPath, snapshotPath); err != nil {
 		return err
 	}
 
-	fmt.Printf("Snapshot created (%d messages)\n", len(cr.messages))
+	fmt.Printf("\nSnapshot created (%d messages)\n", len(cr.messages))
 	return cr.truncateWAL()
 }
 
@@ -125,22 +126,23 @@ func (cr *ChatRoom) truncateWAL() error {
 	defer cr.walMu.Unlock()
 
 	if cr.walFile != nil {
-		cr.WalFile.Close()
+		cr.walFile.Close()
 	}
 
 	walPath := filepath.Join(cr.dataDir, "messages.wal")
-	file, err := os.OpenFile(walPath)
+	file, err := os.OpenFile(walPath, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	cr.walFile = file
-	ft.Println("WAL truncated")
+	fmt.Println("WAL truncated")
 	return nil
 }
 
 func (cr *ChatRoom) loadSnapshot() error {
 	snapshotPath := filepath.Join(cr.dataDir, "snapshot.json")
-	if file, err := os.Open(snapshotPath); err != nil {
+	file, err := os.Open(snapshotPath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
@@ -148,7 +150,8 @@ func (cr *ChatRoom) loadSnapshot() error {
 	}
 	defer file.Close()
 
-	if data, err := io.ReadAll(file); err != nil {
+	data, err := io.ReadAll(file)
+	if err != nil {
 		return err
 	}
 

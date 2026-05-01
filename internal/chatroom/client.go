@@ -37,14 +37,14 @@ func StartClient() {
 
 	for {
 		fmt.Print(">> ")
-		message, _ := inputRead.ReadString('\n')
+		message, _ := inputReader.ReadString('\n')
 		message = strings.TrimSpace(message)
 
 		if message == "" {
 			continue
 		}
 
-		conn.Write([]byte(message, "\n"))
+		conn.Write([]byte(message + "\n"))
 	}
 
 }

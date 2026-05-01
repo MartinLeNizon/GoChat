@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func NewChatRoom(dataDir string) (*ChatRoom, error) {
@@ -35,7 +38,7 @@ func NewChatRoom(dataDir string) (*ChatRoom, error) {
 }
 
 func (cr *ChatRoom) periodicSnapshots() {
-	ticker := time.NewTicker(5 * time.Minutes)			// TODO: Make global
+	ticker := time.NewTicker(5 * time.Minute)			// TODO: Make global
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -53,7 +56,7 @@ func (cr *ChatRoom) periodicSnapshots() {
 
 func (cr *ChatRoom) Run() {
 	fmt.Println("GoChat heartbeat started...")
-	go cr.cleanupInactiveClients()			// TODO: IMPLEMENT
+	go cr.cleanUpInactiveClients()			// TODO: IMPLEMENT
 
 	for {
 		select {
@@ -71,20 +74,13 @@ func (cr *ChatRoom) Run() {
 	}
 }
 
-
-import (
-	"os"
-	"os/signal"
-	"syscall"
-)
-
 func runServer() {
-	chatRoom, err := NewChatRoom(dataDir: "./chatdata")
+	chatRoom, err := NewChatRoom("./chatdata")
 	if err != nil {
 		fmt.Printf("Failed to initialize: %v\n", err)
 		return
 	}
-	defer chatRoom shutdown()
+	defer chatRoom.shutdown()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -120,7 +116,7 @@ func runServer() {
 
 func (cr *ChatRoom) shutdown() {
 	fmt.Println("\nShutting down...")
-	if err := cr.CreateSnapshot(); err != nil {
+	if err := cr.createSnapshot(); err != nil {
 		fmt.Printf("Final snapshot failed: %v\n", err)
 	}
 	if cr.walFile != nil {

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func handleClient(conn net.Conn, chatroom *Chatroom) {
+func handleClient(conn net.Conn, chatRoom *ChatRoom) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Printf("Panic in handleClient: %v\n", r)
@@ -55,7 +55,7 @@ func handleClient(conn net.Conn, chatroom *Chatroom) {
 
 	// Validate reconnection and check duplicate
 	if isReconnecting {
-		if !chatRoom.ValidateReconnectToken(usernane, reconnectToken) {
+		if !chatRoom.validateReconnectToken(username, reconnectToken) {
 			conn.Write([]byte("Invalid reconnect token or session expired\n"))
 			return
 		}
@@ -84,8 +84,8 @@ func handleClient(conn net.Conn, chatroom *Chatroom) {
 		username: 		username,
 		outgoing:		make(chan string, 10),	// Buffered
 		lastActive: 	time.Now(),
+		reconnectToken:	reconnectToken,
 		isSlowClient:	rand.Float64() < 0.1, // 10% for testing
-		reconnectToken:	token,
 	}
 
 	conn.SetReadDeadline(time.Time{})	// clear timeout for normal operation
@@ -114,7 +114,7 @@ func buildWelcomeMessage(username string) string {
 	msg += "  /stats - Show your stats\n"
 	msg += "  /quit - Leave\n"
 
-	return welcomeMsg
+	return msg
 }
 
 func readMessages(client *Client, chatRoom *ChatRoom) {
@@ -127,7 +127,7 @@ func readMessages(client *Client, chatRoom *ChatRoom) {
 	reader := bufio.NewReader(client.conn)
 
 	for {	// while
-		client.conn.SetReadDeadline(time.Now().Add(5 * time.Minutes))		// disconnect after 5 minutes idle
+		client.conn.SetReadDeadline(time.Now().Add(5 * time.Minute))		// disconnect after 5 minutes idle
 
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -139,7 +139,7 @@ func readMessages(client *Client, chatRoom *ChatRoom) {
 			return
 		}
 
-		client.MarkActive()	// update activity timestamp
+		client.markActive()	// update activity timestamp
 
 		message = strings.TrimSpace(message)
 		if message == "" {
@@ -167,7 +167,7 @@ func writeMessages(client *Client) {
 		}
 	}()
 
-	writer := bufio.NewReader(client.conn)
+	writer := bufio.NewWriter(client.conn)
 
 	for message := range client.outgoing {
 		if client.isSlowClient {
@@ -258,7 +258,7 @@ func handleCommand(client *Client, chatRoom *ChatRoom, command string) {
 			count = 100
 		}
 
-		cr.sendHistory(client, count)
+		chatRoom.sendHistory(client, count)
 
 	case "/token":
 		chatRoom.sessionsMu.Lock()
@@ -276,7 +276,7 @@ func handleCommand(client *Client, chatRoom *ChatRoom, command string) {
 
 	case "/quit":
 		announcement := fmt.Sprintf("%s left the chat\n", client.username)
-		chatRoom.broadcast <= announcement
+		chatRoom.broadcast <- announcement
 
 		select {
 		case client.outgoing <- "Goodbye!\n":
